@@ -155,6 +155,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
     private void showEditor() {
         inPrompter = false;
+        editing = false;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(18, 18, 22));
@@ -194,10 +195,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         scriptInput.setLongClickable(true);
         scriptInput.setShowSoftInputOnFocus(true);
         scriptInput.setOnTouchListener((v, e) -> {
-            if (e.getAction() == MotionEvent.ACTION_UP) {
-                v.requestFocus();
-                showKeyboard(scriptInput);
-            }
+            if (e.getAction() == MotionEvent.ACTION_UP && !editing) enterEdit();
             return false;
         });
 
@@ -213,20 +211,17 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             tools.addView(b, tl);
         }
         root.addView(tools);
+        editBtnRef = editBtn;
         editBtn.setOnClickListener(v -> {
-            if (keyboardOpen) {
-                hideKeyboard(scriptInput);
-                scriptInput.clearFocus();
-            } else {
-                scriptInput.requestFocus();
+            if (editing) exitEdit();
+            else {
+                enterEdit();
                 scriptInput.setSelection(scriptInput.getText().length());
-                showKeyboard(scriptInput);
             }
         });
         clearBtn.setOnClickListener(v -> {
             scriptInput.setText("");
-            scriptInput.requestFocus();
-            showKeyboard(scriptInput);
+            enterEdit();
         });
         pasteBtn.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
@@ -234,6 +229,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             if (clip != null && clip.getItemCount() > 0) {
                 CharSequence t = clip.getItemAt(0).coerceToText(this);
                 scriptInput.setText(t);
+                prefs.edit().putString("script", t.toString()).apply();
                 Toast.makeText(this, "הטקסט הודבק", Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(this, "אין טקסט בלוח ההעתקה", Toast.LENGTH_SHORT).show();
@@ -287,26 +283,37 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             else requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, REQ_PERMS);
         });
 
-        // While the keyboard is open, hide everything except the text box and its buttons
-        final View[] hideWhileTyping = {title, hint, fontLabel, fontBar, frontBox, mirrorBox, start};
-        final LinearLayout rootRef = root;
-        keyboardOpen = false;
-        root.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
-            android.graphics.Rect r = new android.graphics.Rect();
-            rootRef.getWindowVisibleDisplayFrame(r);
-            int screen = rootRef.getRootView().getHeight();
-            boolean open = screen - r.bottom > screen * 0.15f;
-            if (open == keyboardOpen) return;
-            keyboardOpen = open;
-            for (View hv : hideWhileTyping) hv.setVisibility(open ? View.GONE : View.VISIBLE);
-            editBtn.setText(open ? "✓ סיום" : "✎ ערוך");
-            if (!open) prefs.edit().putString("script", scriptInput.getText().toString()).apply();
-        });
+        // While editing, hide everything except the text box and its buttons
+        hideWhileTyping = new View[]{title, hint, fontLabel, fontBar, frontBox, mirrorBox, start};
+        editorRoot = root;
+        root.setFocusableInTouchMode(true);
+        editing = false;
 
         setContentView(root);
     }
 
-    private boolean keyboardOpen = false;
+    private boolean editing = false;
+    private Button editBtnRef;
+    private View[] hideWhileTyping;
+    private View editorRoot;
+
+    private void enterEdit() {
+        editing = true;
+        for (View hv : hideWhileTyping) hv.setVisibility(View.GONE);
+        editBtnRef.setText("✓ סיום");
+        scriptInput.requestFocus();
+        showKeyboard(scriptInput);
+    }
+
+    private void exitEdit() {
+        editing = false;
+        hideKeyboard(scriptInput);
+        scriptInput.clearFocus();
+        editorRoot.requestFocus();
+        for (View hv : hideWhileTyping) hv.setVisibility(View.VISIBLE);
+        editBtnRef.setText("✎ ערוך");
+        prefs.edit().putString("script", scriptInput.getText().toString()).apply();
+    }
 
     private void hideKeyboard(View v) {
         InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
@@ -472,6 +479,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     public void onBackPressed() {
         if (inPrompter) leavePrompter();
+        else if (editing) exitEdit();
         else super.onBackPressed();
     }
 
