@@ -27,6 +27,10 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.MotionEvent;
+import android.view.inputmethod.InputMethodManager;
+import android.content.ClipboardManager;
+import android.content.ClipData;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -183,6 +187,53 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         box.setCornerRadius(dp(12));
         scriptInput.setBackground(box);
         scriptInput.setPadding(dp(12), dp(12), dp(12), dp(12));
+        scriptInput.setEnabled(true);
+        scriptInput.setFocusable(true);
+        scriptInput.setFocusableInTouchMode(true);
+        scriptInput.setCursorVisible(true);
+        scriptInput.setLongClickable(true);
+        scriptInput.setShowSoftInputOnFocus(true);
+        scriptInput.setOnTouchListener((v, e) -> {
+            if (e.getAction() == MotionEvent.ACTION_UP) {
+                v.requestFocus();
+                showKeyboard(scriptInput);
+            }
+            return false;
+        });
+
+        LinearLayout tools = new LinearLayout(this);
+        tools.setOrientation(LinearLayout.HORIZONTAL);
+        Button pasteBtn = makeButton("הדבק", Color.argb(220, 40, 110, 200));
+        Button clearBtn = makeButton("נקה", Color.argb(220, 70, 70, 80));
+        Button editBtn = makeButton("מקלדת", Color.argb(220, 70, 70, 80));
+        for (Button b : new Button[]{editBtn, pasteBtn, clearBtn}) {
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, dp(44), 1f);
+            tl.setMargins(dp(3), 0, dp(3), dp(8));
+            tools.addView(b, tl);
+        }
+        root.addView(tools);
+        editBtn.setOnClickListener(v -> {
+            scriptInput.requestFocus();
+            scriptInput.setSelection(scriptInput.getText().length());
+            showKeyboard(scriptInput);
+        });
+        clearBtn.setOnClickListener(v -> {
+            scriptInput.setText("");
+            scriptInput.requestFocus();
+            showKeyboard(scriptInput);
+        });
+        pasteBtn.setOnClickListener(v -> {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            ClipData clip = cm != null ? cm.getPrimaryClip() : null;
+            if (clip != null && clip.getItemCount() > 0) {
+                CharSequence t = clip.getItemAt(0).coerceToText(this);
+                scriptInput.setText(t);
+                Toast.makeText(this, "הטקסט הודבק", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "אין טקסט בלוח ההעתקה", Toast.LENGTH_SHORT).show();
+            }
+        });
+
         root.addView(scriptInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         fontLabel = new TextView(this);
@@ -231,6 +282,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         });
 
         setContentView(root);
+    }
+
+    private void showKeyboard(View v) {
+        v.post(() -> {
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT);
+        });
     }
 
     private boolean hasPermissions() {
