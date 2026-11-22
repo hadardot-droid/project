@@ -203,9 +203,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
         LinearLayout tools = new LinearLayout(this);
         tools.setOrientation(LinearLayout.HORIZONTAL);
-        Button pasteBtn = makeButton("הדבק", Color.argb(220, 40, 110, 200));
-        Button clearBtn = makeButton("נקה", Color.argb(220, 70, 70, 80));
-        Button editBtn = makeButton("מקלדת", Color.argb(220, 70, 70, 80));
+        int blue = Color.rgb(40, 110, 200);
+        Button pasteBtn = makeButton("הדבק", blue);
+        Button clearBtn = makeButton("נקה", blue);
+        final Button editBtn = makeButton("✎ ערוך", blue);
         for (Button b : new Button[]{editBtn, pasteBtn, clearBtn}) {
             LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, dp(44), 1f);
             tl.setMargins(dp(3), 0, dp(3), dp(8));
@@ -213,9 +214,14 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         }
         root.addView(tools);
         editBtn.setOnClickListener(v -> {
-            scriptInput.requestFocus();
-            scriptInput.setSelection(scriptInput.getText().length());
-            showKeyboard(scriptInput);
+            if (keyboardOpen) {
+                hideKeyboard(scriptInput);
+                scriptInput.clearFocus();
+            } else {
+                scriptInput.requestFocus();
+                scriptInput.setSelection(scriptInput.getText().length());
+                showKeyboard(scriptInput);
+            }
         });
         clearBtn.setOnClickListener(v -> {
             scriptInput.setText("");
@@ -281,7 +287,30 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             else requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, REQ_PERMS);
         });
 
+        // While the keyboard is open, hide everything except the text box and its buttons
+        final View[] hideWhileTyping = {title, hint, fontLabel, fontBar, frontBox, mirrorBox, start};
+        final LinearLayout rootRef = root;
+        keyboardOpen = false;
+        root.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            android.graphics.Rect r = new android.graphics.Rect();
+            rootRef.getWindowVisibleDisplayFrame(r);
+            int screen = rootRef.getRootView().getHeight();
+            boolean open = screen - r.bottom > screen * 0.15f;
+            if (open == keyboardOpen) return;
+            keyboardOpen = open;
+            for (View hv : hideWhileTyping) hv.setVisibility(open ? View.GONE : View.VISIBLE);
+            editBtn.setText(open ? "✓ סיום" : "✎ ערוך");
+            if (!open) prefs.edit().putString("script", scriptInput.getText().toString()).apply();
+        });
+
         setContentView(root);
+    }
+
+    private boolean keyboardOpen = false;
+
+    private void hideKeyboard(View v) {
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
     }
 
     private void showKeyboard(View v) {
