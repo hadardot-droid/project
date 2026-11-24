@@ -89,7 +89,7 @@ class ReelViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val ok = withContext(Dispatchers.IO) {
                 fresh.filter { uri ->
-                    dates[uri] = readDate(uri)
+                    readDate(uri)?.let { dates[uri] = it }
                     store.loadThumb(uri)
                 }
             }
