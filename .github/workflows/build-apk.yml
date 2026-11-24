@@ -1,0 +1,72 @@
+name: Build APK
+
+# Branch memory-reel holds only the "זיכרונות" app; main (teleprompter) is untouched.
+on:
+  push:
+    branches: [memory-reel]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Download depth model and build
+        run: |
+          set -o pipefail
+          {
+            mkdir -p app/src/main/assets
+            base="https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx"
+            ok=""
+            for f in model_quantized.onnx model_int8.onnx model_uint8.onnx model.onnx; do
+              echo "Trying $f"
+              if curl -fsSL --retry 3 -o app/src/main/assets/depth.onnx "$base/$f"; then ok="$f"; break; fi
+            done
+            if [ -z "$ok" ]; then echo "MODEL DOWNLOAD FAILED"; exit 1; fi
+            ls -la app/src/main/assets
+            gradle --no-daemon assembleRelease
+          } 2>&1 | tee build.log
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk MemoryReel.apk
+          gh release delete memory-reel --yes --cleanup-tag || true
+          gh release create memory-reel MemoryReel.apk \
+            --target "${{ github.sha }}" \
+            --title "זיכרונות – אפליקציית אנדרואיד" \
+            --notes "הורידו את MemoryReel.apk בטלפון ואשרו התקנה. (commit ${{ github.sha }})" \
+            --latest=false
+
+      - name: Report failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "memory-reel build failed (run ${{ github.run_number }}, commit ${{ github.sha }})."
+            echo
+            echo '```'
+            grep -E "^e: |error:|FAILED|What went wrong|MODEL DOWNLOAD" -A3 build.log | head -120 || true
+            echo '---- tail ----'
+            tail -60 build.log || true
+            echo '```'
+          } > report.md
+          gh issue create --title "memory-reel build failed (run ${{ github.run_number }})" --body-file report.md
