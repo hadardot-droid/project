@@ -30,6 +30,10 @@ enum class ReelStyle(val label: String, val transition: Float, val zoom: Float, 
     ENERGETIC("אנרגטי", 0.35f, 0.20f, 1.8f),
     VINTAGE("וינטג'", 1.2f, 0.10f, 3.0f),
     DREAMY("חלומי", 1.4f, 0.16f, 3.5f),
+    BLACK_WHITE("שחור לבן", 1.2f, 0.10f, 3.2f),
+    ROMANTIC("רומנטי", 1.6f, 0.12f, 3.8f),
+    CINEMATIC("קולנועי", 1.2f, 0.08f, 3.5f),
+    FESTIVE("חגיגי", 0.5f, 0.18f, 2.2f),
 }
 
 enum class ReelFormat(val label: String, val width: Int, val height: Int) {
@@ -98,21 +102,38 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
     private val shaders = HashMap<Bitmap, BitmapShader>()
     private val slots = arrayOf(DepthWarper.Slot(), DepthWarper.Slot())
 
-    private val sepia: ColorMatrixColorFilter? = if (style == ReelStyle.VINTAGE) {
-        val desat = ColorMatrix().apply { setSaturation(0.35f) }
-        val warm = ColorMatrix(
-            floatArrayOf(
-                1.08f, 0f, 0f, 0f, 14f,
-                0f, 1.0f, 0f, 0f, 6f,
-                0f, 0f, 0.86f, 0f, -6f,
-                0f, 0f, 0f, 1f, 0f,
+    /** Colour grade for the photos, per style (null = natural colours). */
+    private val sepia: ColorMatrixColorFilter? = when (style) {
+        ReelStyle.VINTAGE -> grade(0.35f, 1.08f, 1.0f, 0.86f, 14f, 6f, -6f)
+        // Black & white with a little extra contrast, like a silver print.
+        ReelStyle.BLACK_WHITE -> grade(0f, 1.18f, 1.18f, 1.18f, -22f, -22f, -22f)
+        // Soft, warm and rosy, with lifted blacks.
+        ReelStyle.ROMANTIC -> grade(0.85f, 1.04f, 0.96f, 1.0f, 18f, 8f, 14f)
+        // Film look: warm highlights, cool lifted shadows, a touch more contrast.
+        ReelStyle.CINEMATIC -> grade(0.9f, 1.1f, 1.04f, 0.94f, -8f, -6f, 10f)
+        // Bright party colours.
+        ReelStyle.FESTIVE -> grade(1.3f, 1.04f, 1.04f, 1.04f, 2f, 2f, 2f)
+        else -> null
+    }
+
+    private fun grade(
+        saturation: Float, r: Float, g: Float, b: Float, ro: Float, go: Float, bo: Float,
+    ): ColorMatrixColorFilter {
+        val m = ColorMatrix().apply { setSaturation(saturation) }
+        m.postConcat(
+            ColorMatrix(
+                floatArrayOf(
+                    r, 0f, 0f, 0f, ro,
+                    0f, g, 0f, 0f, go,
+                    0f, 0f, b, 0f, bo,
+                    0f, 0f, 0f, 1f, 0f,
+                )
             )
         )
-        desat.postConcat(warm)
-        ColorMatrixColorFilter(desat)
-    } else null
+        return ColorMatrixColorFilter(m)
+    }
 
-    private val grainShader: BitmapShader? = if (style == ReelStyle.VINTAGE) {
+    private val grainShader: BitmapShader? = if (style == ReelStyle.VINTAGE || style == ReelStyle.BLACK_WHITE) {
         val size = 128
         val r = Random(7)
         val px = IntArray(size * size) {
@@ -126,6 +147,34 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
     } else null
     private val grainPaint = Paint().apply { shader = grainShader }
 
+    /** Floating bokeh lights (romantic) or falling confetti (festive), in 0..1 frame units. */
+    private class Particle(
+        val x: Float, val y: Float, val size: Float, val speed: Float,
+        val phase: Float, val spin: Float, val color: Int,
+    )
+
+    private val particles: List<Particle> = run {
+        val r = Random(11)
+        when (style) {
+            ReelStyle.ROMANTIC -> List(18) {
+                val warm = listOf(Color.rgb(255, 182, 193), Color.rgb(255, 214, 170), Color.rgb(255, 140, 170))
+                Particle(r.nextFloat(), r.nextFloat(), 0.02f + r.nextFloat() * 0.05f, 0.015f + r.nextFloat() * 0.03f,
+                    r.nextFloat() * 6.28f, 0f, warm[r.nextInt(warm.size)])
+            }
+            ReelStyle.FESTIVE -> List(70) {
+                val party = listOf(
+                    Color.rgb(255, 92, 138), Color.rgb(255, 199, 95), Color.rgb(80, 200, 255),
+                    Color.rgb(120, 230, 140), Color.rgb(190, 130, 255), Color.WHITE,
+                )
+                Particle(r.nextFloat(), r.nextFloat(), 0.008f + r.nextFloat() * 0.01f, 0.12f + r.nextFloat() * 0.16f,
+                    r.nextFloat() * 6.28f, (r.nextFloat() * 2f - 1f) * 360f, party[r.nextInt(party.size)])
+            }
+            else -> emptyList()
+        }
+    }
+    private val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val barPaint = Paint().apply { color = Color.BLACK }
+
     private val leakPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { blendMode = BlendMode.SCREEN }
     private var leakShader: RadialGradient? = null
     private val vignettePaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -138,8 +187,13 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
             ReelStyle.ENERGETIC -> Typeface.create("sans-serif", Typeface.BOLD)
             ReelStyle.DREAMY -> Typeface.create("sans-serif-light", Typeface.NORMAL)
             ReelStyle.CALM -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            ReelStyle.BLACK_WHITE -> Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            ReelStyle.ROMANTIC -> Typeface.create("serif", Typeface.ITALIC)
+            ReelStyle.CINEMATIC -> Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            ReelStyle.FESTIVE -> Typeface.create("sans-serif-black", Typeface.NORMAL)
         }
         titlePaint.typeface = face
+        if (style == ReelStyle.CINEMATIC) titlePaint.letterSpacing = 0.12f
         subPaint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
 
@@ -154,6 +208,10 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
             ReelStyle.DREAMY -> 90
             ReelStyle.CALM -> 70
             ReelStyle.ENERGETIC -> 60
+            ReelStyle.BLACK_WHITE -> 160
+            ReelStyle.ROMANTIC -> 80
+            ReelStyle.CINEMATIC -> 130
+            ReelStyle.FESTIVE -> 50
         }
         vignettePaint.shader = RadialGradient(
             fw / 2f, fh / 2f, hypot(fw, fh) / 2f,
@@ -161,10 +219,15 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
             floatArrayOf(0f, 0.55f, 1f),
             Shader.TileMode.CLAMP,
         )
-        if (style == ReelStyle.DREAMY) {
+        if (style == ReelStyle.DREAMY || style == ReelStyle.ROMANTIC) {
+            val (c1, c2) = if (style == ReelStyle.ROMANTIC) {
+                Color.argb(80, 255, 150, 180) to Color.argb(35, 255, 200, 160)
+            } else {
+                Color.argb(95, 255, 176, 120) to Color.argb(45, 255, 110, 170)
+            }
             leakShader = RadialGradient(
                 0f, 0f, max(fw, fh) * 0.55f,
-                intArrayOf(Color.argb(95, 255, 176, 120), Color.argb(45, 255, 110, 170), Color.TRANSPARENT),
+                intArrayOf(c1, c2, Color.TRANSPARENT),
                 floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP,
             )
@@ -300,6 +363,10 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
                 ReelStyle.DREAMY -> m.rot * 1.5f * sweep
                 ReelStyle.ENERGETIC -> m.rot * 2f * (1f - e)
                 ReelStyle.CALM -> 0f
+                ReelStyle.BLACK_WHITE -> 0f
+                ReelStyle.ROMANTIC -> m.rot * 1.2f * sweep
+                ReelStyle.CINEMATIC -> 0f
+                ReelStyle.FESTIVE -> m.rot * 4f
             }
             val hw = pw / 2f
             val hh = ph / 2f
@@ -342,14 +409,7 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
         when (style) {
             ReelStyle.VINTAGE -> {
                 canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
-                val frame = (t * 24f).toInt()
-                val r = Random(frame)
-                val gs = max(1f, fw / 540f)
-                shaderMatrix.reset()
-                shaderMatrix.setScale(gs, gs)
-                shaderMatrix.postTranslate(r.nextFloat() * 128f * gs, r.nextFloat() * 128f * gs)
-                grainShader?.setLocalMatrix(shaderMatrix)
-                canvas.drawRect(0f, 0f, fw, fh, grainPaint)
+                drawGrain(canvas, fw, fh, t)
             }
             ReelStyle.DREAMY -> {
                 // A warm light leak drifting slowly across the frame.
@@ -361,6 +421,34 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
                 canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
             }
             ReelStyle.CALM -> canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
+            ReelStyle.BLACK_WHITE -> {
+                canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
+                drawGrain(canvas, fw, fh, t)
+            }
+            ReelStyle.ROMANTIC -> {
+                val cx = fw * (0.5f + 0.4f * sin(t * 0.25f))
+                val cy = fh * (0.35f + 0.2f * cos(t * 0.2f))
+                shaderMatrix.setTranslate(cx, cy)
+                leakShader?.setLocalMatrix(shaderMatrix)
+                canvas.drawRect(0f, 0f, fw, fh, leakPaint)
+                drawBokeh(canvas, fw, fh, t)
+                canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
+            }
+            ReelStyle.CINEMATIC -> {
+                canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
+                drawLetterbox(canvas, fw, fh, t)
+            }
+            ReelStyle.FESTIVE -> {
+                val k = floor(t / per).toInt()
+                val since = t - k * per
+                if (k in 1 until n && since < 0.12f) {
+                    fillPaint.color = Color.WHITE
+                    fillPaint.alpha = ((1f - since / 0.12f) * 70).toInt()
+                    canvas.drawRect(0f, 0f, fw, fh, fillPaint)
+                }
+                drawConfetti(canvas, fw, fh, t)
+                canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
+            }
             ReelStyle.ENERGETIC -> {
                 // Quick white flash on every cut, like a beat.
                 val k = floor(t / per).toInt()
@@ -373,6 +461,68 @@ class SlideshowRenderer(private val store: PhotoStore, val config: ReelConfig) {
                 canvas.drawRect(0f, 0f, fw, fh, vignettePaint)
             }
         }
+    }
+
+    private fun drawGrain(canvas: Canvas, fw: Float, fh: Float, t: Float) {
+        val r = Random((t * 24f).toInt())
+        val gs = max(1f, fw / 540f)
+        shaderMatrix.reset()
+        shaderMatrix.setScale(gs, gs)
+        shaderMatrix.postTranslate(r.nextFloat() * 128f * gs, r.nextFloat() * 128f * gs)
+        grainShader?.setLocalMatrix(shaderMatrix)
+        canvas.drawRect(0f, 0f, fw, fh, grainPaint)
+    }
+
+    /** Soft out-of-focus lights drifting upward and gently pulsing. */
+    private fun drawBokeh(canvas: Canvas, fw: Float, fh: Float, t: Float) {
+        val unit = min(fw, fh)
+        for (p in particles) {
+            val y = ((p.y - p.speed * t) % 1f + 1f) % 1f
+            val x = p.x + 0.03f * sin(t * 0.5f + p.phase)
+            val pulse = 0.55f + 0.45f * sin(t * 1.3f + p.phase)
+            val radius = p.size * unit
+            particlePaint.shader = RadialGradient(
+                x * fw, y * fh, radius,
+                intArrayOf(
+                    Color.argb((110 * pulse).toInt(), Color.red(p.color), Color.green(p.color), Color.blue(p.color)),
+                    Color.argb((40 * pulse).toInt(), Color.red(p.color), Color.green(p.color), Color.blue(p.color)),
+                    Color.TRANSPARENT,
+                ),
+                floatArrayOf(0f, 0.6f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            particlePaint.blendMode = BlendMode.SCREEN
+            canvas.drawCircle(x * fw, y * fh, radius, particlePaint)
+        }
+        particlePaint.shader = null
+        particlePaint.blendMode = null
+    }
+
+    /** Small paper pieces falling and spinning. */
+    private fun drawConfetti(canvas: Canvas, fw: Float, fh: Float, t: Float) {
+        val unit = min(fw, fh)
+        for (p in particles) {
+            val y = ((p.y + p.speed * t) % 1.2f) - 0.1f
+            val x = p.x + 0.04f * sin(t * 2f + p.phase)
+            val w = p.size * unit
+            particlePaint.color = p.color
+            canvas.save()
+            canvas.translate(x * fw, y * fh)
+            canvas.rotate(p.spin * t + p.phase * 57f)
+            // Flip effect: the piece looks thinner as it turns.
+            canvas.scale(1f, 0.35f + 0.65f * abs(sin(t * 4f + p.phase)))
+            canvas.drawRect(-w, -w * 0.5f, w, w * 0.5f, particlePaint)
+            canvas.restore()
+        }
+    }
+
+    /** Wide-screen black bars that slide in at the start. */
+    private fun drawLetterbox(canvas: Canvas, fw: Float, fh: Float, t: Float) {
+        val target = if (fw > fh) max(0f, (fh - fw / 2.35f) / 2f) else fh * 0.09f
+        val bar = target * smooth((t / 1.2f).coerceIn(0f, 1f))
+        if (bar <= 0f) return
+        canvas.drawRect(0f, 0f, fw, bar, barPaint)
+        canvas.drawRect(0f, fh - bar, fw, fh, barPaint)
     }
 
     private fun drawTitle(canvas: Canvas, fw: Float, fh: Float, t: Float) {
