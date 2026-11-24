@@ -27,6 +27,14 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
+      # Android installs an update only if it is signed with the same key as the installed
+      # app, so keep the debug signing key between builds instead of creating a new one.
+      - name: Keep the signing key between builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: memoryreel-signing-key-v1
+
       - id: build
         name: Download depth model and build
         run: |

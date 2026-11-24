@@ -12,8 +12,10 @@ android {
         applicationId = "com.memoryreel.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.1"
+        // Every GitHub build gets a higher version number, so the phone accepts it as an update.
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = 100 + build
+        versionName = "1.2.$build"
         ndk {
             // Phones only: keeps the APK small (ONNX Runtime ships native code per CPU type).
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
@@ -23,8 +25,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the release APK installs directly.
-            // Replace with your own keystore before publishing to Google Play.
+            // Signed with the build machine's debug key, which the workflow keeps between
+            // builds (actions/cache) so updates install over the previous version.
+            // Use a private keystore before publishing to Google Play.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
