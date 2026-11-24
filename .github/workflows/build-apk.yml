@@ -16,18 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - id: java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
-
-      - uses: gradle/actions/setup-gradle@v4
+      - id: gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
 
-      - name: Download depth model and build
+      - id: build
+        name: Download depth model and build
         run: |
           set -o pipefail
           {
@@ -43,7 +44,8 @@ jobs:
             gradle --no-daemon assembleRelease
           } 2>&1 | tee build.log
 
-      - name: Publish release
+      - id: publish
+        name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -62,6 +64,7 @@ jobs:
         run: |
           {
             echo "memory-reel build failed (run ${{ github.run_number }}, commit ${{ github.sha }})."
+            echo "steps: java=${{ steps.java.outcome }} gradle=${{ steps.gradle.outcome }} build=${{ steps.build.outcome }} publish=${{ steps.publish.outcome }}"
             echo
             echo '```'
             grep -E "^e: |error:|FAILED|What went wrong|MODEL DOWNLOAD" -A3 build.log | head -120 || true
