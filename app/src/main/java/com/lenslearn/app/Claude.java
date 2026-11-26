@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Calls the Anthropic Messages API. Run off the main thread. */
 public final class Claude {
-    public static final String MODEL = "claude-sonnet-5-5";
+    public static final String MODEL = "claude-haiku-5-5";
 
     public static final class ApiError extends Exception {
         public final int status;
