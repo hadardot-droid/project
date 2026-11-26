@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="red">#FF5A36</color>
+    <color name="tag">#FFD23F</color>
+    <color name="ink">#161616</color>
+    <color name="soft">#6B6660</color>
+    <color name="card">#F7F4EF</color>
+    <color name="line">#E8E3DC</color>
+
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/red</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:colorAccent">@color/red</item>
+        <item name="android:colorPrimary">@color/red</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <style name="Tab">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="BigBtn">
+        <item name="android:layout_height">56dp</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:background">@drawable/btn_red</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="SmallBtn">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">46dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/tag</item>
+        <item name="android:background">@drawable/btn_ink</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:layout_marginEnd">8dp</item>
+    </style>
+</resources>
